@@ -32,6 +32,53 @@ public enum ShellEscaping {
     return result
   }
 
+  /// Quotes `value` as one shell word, writing each occurrence of a
+  /// substitution's literal as its variable, `"$NAME"`, and every other run of
+  /// text single-quoted as in ``quote(_:)``.
+  ///
+  /// ```swift
+  /// let key = ShellSubstitution(literal: "s3cr3t", variable: "KEY")!
+  /// ShellEscaping.quote("k=s3cr3t&q=it's", substituting: [key])
+  /// // 'k='"$KEY"'&q=it'\''s'
+  /// ```
+  ///
+  /// Matching is on Unicode scalars, left to right; where several literals
+  /// match at the same place, the longest wins, then the first given. With each
+  /// variable set to its literal, the shell yields exactly `value`.
+  public static func quote(
+    _ value: String, substituting substitutions: [ShellSubstitution]
+  ) -> String {
+    guard !substitutions.isEmpty else { return quote(value) }
+    let patterns = substitutions.map {
+      (scalars: Array($0.literal.unicodeScalars), variable: $0.variable)
+    }
+    let scalars = Array(value.unicodeScalars)
+    var result = ""
+    var literal = String.UnicodeScalarView()
+    var index = 0
+    while index < scalars.count {
+      var match: (length: Int, variable: String)?
+      for pattern in patterns
+      where pattern.scalars.count > (match?.length ?? 0)
+        && scalars.count - index >= pattern.scalars.count
+        && scalars[index..<(index + pattern.scalars.count)].elementsEqual(pattern.scalars)
+      {
+        match = (pattern.scalars.count, pattern.variable)
+      }
+      if let match {
+        if !literal.isEmpty { result += quote(String(literal)) }
+        literal = String.UnicodeScalarView()
+        result += "\"$" + match.variable + "\""
+        index += match.length
+      } else {
+        literal.append(scalars[index])
+        index += 1
+      }
+    }
+    if !literal.isEmpty || result.isEmpty { result += quote(String(literal)) }
+    return result
+  }
+
   /// Returns `true` when `value` is non-empty and made only of characters that
   /// no POSIX shell treats specially, so it can safely be emitted without quotes.
   ///

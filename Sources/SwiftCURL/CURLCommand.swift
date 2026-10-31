@@ -80,30 +80,86 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
     if let standardInput {
       switch standardInput {
       case .base64(let encoded):
-        segments.append("printf '%s' " + ShellEscaping.quote(encoded))
-        segments.append("| base64 --decode")
+        if let pieces = Self.pieces(of: standardInput.data, substituting: format.substitutions) {
+          // `{ printf … | base64 --decode; printf '%s' "$NAME"; …; }` writes the
+          // same bytes, with each literal's bytes read from its variable.
+          let parts = pieces.map { piece in
+            switch piece {
+            case .bytes(let bytes):
+              "printf '%s' " + ShellEscaping.quote(Data(bytes).base64EncodedString())
+                + " | base64 --decode"
+            case .variable(let name):
+              "printf '%s' \"$" + name + "\""
+            }
+          }
+          segments.append("{ " + parts.joined(separator: "; ") + "; }")
+        } else {
+          segments.append("printf '%s' " + ShellEscaping.quote(encoded))
+          segments.append("| base64 --decode")
+        }
       }
       segments.append(
-        "| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL)
+        "| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
     } else {
-      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL)
+      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
     }
 
     for option in options {
       let (flag, value) = option.components(flagStyle: format.flagStyle)
       var segment = ShellEscaping.isPlainFlag(flag) ? flag : ShellEscaping.quote(flag)
       if let value {
-        segment += " " + ShellEscaping.quote(value)
+        segment += " " + ShellEscaping.quote(value, substituting: format.substitutions)
       }
       segments.append(segment)
     }
     return segments.joined(separator: continuation)
   }
 
-  private var renderedURL: String {
-    urlArguments.count == 2
-      ? "--url " + ShellEscaping.quote(url)
-      : ShellEscaping.quote(url)
+  private func renderedURL(_ format: CURLRenderOptions) -> String {
+    let quoted = ShellEscaping.quote(url, substituting: format.substitutions)
+    return urlArguments.count == 2 ? "--url " + quoted : quoted
+  }
+
+  private enum Piece {
+    case bytes([UInt8])
+    case variable(String)
+  }
+
+  /// `data` cut where a substitution's literal (as UTF-8) appears, or `nil`
+  /// when nothing matches. The longest literal wins, then the first given.
+  private static func pieces(
+    of data: Data?, substituting substitutions: [ShellSubstitution]
+  ) -> [Piece]? {
+    guard let data, !substitutions.isEmpty else { return nil }
+    let bytes = [UInt8](data)
+    let patterns = substitutions.map { (bytes: Array($0.literal.utf8), variable: $0.variable) }
+    var pieces: [Piece] = []
+    var literal: [UInt8] = []
+    var index = 0
+    while index < bytes.count {
+      var match: (length: Int, variable: String)?
+      for pattern in patterns
+      where pattern.bytes.count > (match?.length ?? 0)
+        && bytes.count - index >= pattern.bytes.count
+        && bytes[index..<(index + pattern.bytes.count)].elementsEqual(pattern.bytes)
+      {
+        match = (pattern.bytes.count, pattern.variable)
+      }
+      if let match {
+        if !literal.isEmpty { pieces.append(.bytes(literal)) }
+        literal = []
+        pieces.append(.variable(match.variable))
+        index += match.length
+      } else {
+        literal.append(bytes[index])
+        index += 1
+      }
+    }
+    guard pieces.contains(where: { if case .variable = $0 { true } else { false } }) else {
+      return nil
+    }
+    if !literal.isEmpty { pieces.append(.bytes(literal)) }
+    return pieces
   }
 
   /// The single-line rendering of the command.
