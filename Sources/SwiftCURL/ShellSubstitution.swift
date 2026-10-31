@@ -14,15 +14,18 @@
 /// the shell neither splits nor globs the variable's value. With the variable
 /// set to `literal`, curl receives exactly ``CURLCommand/arguments(flagStyle:)``.
 public struct ShellSubstitution: Sendable, Hashable, Codable {
-  /// The text to replace. Never empty.
+  /// The text to replace. Never empty, and never contains NUL (no shell
+  /// variable can hold it).
   public let literal: String
   /// The shell variable written in its place. A POSIX name: `[A-Za-z_][A-Za-z0-9_]*`.
   public let variable: String
 
-  /// Returns `nil` when `literal` is empty or `variable` is not a POSIX
-  /// shell variable name.
+  /// Returns `nil` when `literal` is empty or contains NUL, or when
+  /// `variable` is not a POSIX shell variable name.
   public init?(literal: String, variable: String) {
-    guard !literal.isEmpty, Self.isValidVariableName(variable) else { return nil }
+    guard !literal.isEmpty, !literal.unicodeScalars.contains("\0"),
+      Self.isValidVariableName(variable)
+    else { return nil }
     self.literal = literal
     self.variable = variable
   }
@@ -49,7 +52,8 @@ public struct ShellSubstitution: Sendable, Hashable, Codable {
     guard let substitution = ShellSubstitution(literal: literal, variable: variable) else {
       throw DecodingError.dataCorruptedError(
         forKey: .variable, in: container,
-        debugDescription: "An empty literal or an invalid shell variable name.")
+        debugDescription: "An empty literal, a literal with NUL, or an invalid shell variable name."
+      )
     }
     self = substitution
   }

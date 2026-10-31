@@ -55,8 +55,9 @@ struct SubstitutionTests {
     #expect(ShellSubstitution(literal: "x", variable: name) != nil)
   }
 
-  @Test func rejectsAnEmptyLiteral() {
+  @Test func rejectsAnEmptyLiteralOrOneWithNUL() {
     #expect(ShellSubstitution(literal: "", variable: "A") == nil)
+    #expect(ShellSubstitution(literal: "a\0b", variable: "A") == nil)
   }
 
   @Test func codableRoundTripAndValidation() throws {
@@ -96,14 +97,16 @@ struct SubstitutionTests {
           --s3cr3t
         """#)
 
-    request.httpBody = Data([0]) + Data("s3cr3t".utf8)
+    request.httpBody = Data([0]) + Data("s3cr3t".utf8) + Data([1])
     let binary = try request.curlCommand()
-    let payload = try #require(
-      binary.standardInput.map { if case .base64(let text) = $0 { text } else { "" } })
-    let whole = ShellSubstitution(literal: payload, variable: "PAYLOAD")!
     #expect(
-      binary.render(.init(substitutions: [whole])).hasPrefix(
-        #"printf '%s' "$PAYLOAD" | base64 --decode"#))
+      binary.render(.init(substitutions: [Self.key])).hasPrefix(
+        #"{ printf '%s' 'AA==' | base64 --decode; printf '%s' "$API_KEY"; printf '%s' 'AQ==' | base64 --decode; } | curl "#
+      ))
+    // Without a match in its bytes, the payload renders as before.
+    #expect(
+      binary.render(.init(substitutions: [ShellSubstitution(literal: "zzz", variable: "Z")!]))
+        == binary.render())
   }
 
   /// With each variable set to its literal, every shell hands curl exactly the
@@ -135,7 +138,8 @@ struct SubstitutionTests {
         try makeRequest(
           "https://example.com/upload", method: "PUT",
           headers: ["X-Secret": secret.literal.replacingOccurrences(of: "\n", with: " ")],
-          body: Data([0, 1, 2]) + Data(secret.literal.utf8)
+          body: Data(secret.literal.utf8) + Data([0, 1, 2]) + Data(secret.literal.utf8)
+            + Data([0xFF])
         ).curlCommand(),
       ]
       for command in commands {

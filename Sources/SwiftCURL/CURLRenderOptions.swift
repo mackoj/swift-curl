@@ -16,7 +16,9 @@ public struct CURLRenderOptions: Sendable, Hashable, Codable {
   public var layout: Layout
   public var flagStyle: CURLOption.FlagStyle
   /// Literals written as shell variables (`"$NAME"`) wherever they appear in
-  /// the URL, an option value or the standard-input payload. Flags and the
+  /// the URL or an option value. In a binary body piped through standard
+  /// input, a literal is matched on its UTF-8 bytes and written with
+  /// `printf '%s' "$NAME"` between the decoded pieces. Flags and the
   /// executable are never substituted. Empty by default.
   public var substitutions: [ShellSubstitution]
 

@@ -58,7 +58,7 @@ command.render(.init(layout: .multiline(indentation: "    "), flagStyle: .long))
 
 ### Keeping secrets out of the command
 
-A `ShellSubstitution` writes every occurrence of a literal as a shell variable, `"$NAME"`, wherever it appears in the URL, an option value or the piped binary body. The literal parts stay single-quoted, so the command stays injection-safe, and it runs once the variable is set.
+A `ShellSubstitution` writes every occurrence of a literal as a shell variable, `"$NAME"`, wherever it appears in the URL or an option value. The literal parts stay single-quoted, so the command stays injection-safe, and it runs once the variable is set. In a binary body piped through standard input, the literal is matched on its UTF-8 bytes, and the pipeline becomes `{ printf '%s' '<base64>' | base64 --decode; printf '%s' "$NAME"; …; } | curl …`. A literal can't be empty or contain NUL.
 
 ```swift
 let token = ShellSubstitution(literal: "s3cr3t", variable: "API_TOKEN")!
@@ -67,7 +67,7 @@ print(command.render(.init(layout: .multiline(indentation: "  "), substitutions:
 //   -H 'Authorization: Bearer '"$API_TOKEN"
 ```
 
-Matching is exact (Unicode scalars); where several literals match at the same place, the longest wins. The initializer returns `nil` for an empty literal or a variable that is not a POSIX name (`[A-Za-z_][A-Za-z0-9_]*`). Pass each spelling a value can take (raw, percent-encoded, base64) as its own substitution. `ShellEscaping.quote(_:substituting:)` applies the same rule to a single word.
+Matching is exact (Unicode scalars); where several literals match at the same place, the longest wins. The initializer returns `nil` for such a literal, or for a variable that is not a POSIX name (`[A-Za-z_][A-Za-z0-9_]*`). Pass each spelling a value can take (raw, percent-encoded, base64) as its own substitution. `ShellEscaping.quote(_:substituting:)` applies the same rule to a single word.
 
 ## Behaviour
 
