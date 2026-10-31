@@ -88,8 +88,8 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
             case .bytes(let bytes):
               "printf '%s' " + ShellEscaping.quote(Data(bytes).base64EncodedString())
                 + " | base64 --decode"
-            case .variable(let name):
-              "printf '%s' \"$" + name + "\""
+            case .variable(let word):
+              "printf '%s' " + word
             }
           }
           segments.append("{ " + parts.joined(separator: "; ") + "; }")
@@ -122,6 +122,7 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
 
   private enum Piece {
     case bytes([UInt8])
+    /// A substitution's ``ShellSubstitution/shellWord``.
     case variable(String)
   }
 
@@ -132,23 +133,23 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
   ) -> [Piece]? {
     guard let data, !substitutions.isEmpty else { return nil }
     let bytes = [UInt8](data)
-    let patterns = substitutions.map { (bytes: Array($0.literal.utf8), variable: $0.variable) }
+    let patterns = substitutions.map { (bytes: Array($0.literal.utf8), word: $0.shellWord) }
     var pieces: [Piece] = []
     var literal: [UInt8] = []
     var index = 0
     while index < bytes.count {
-      var match: (length: Int, variable: String)?
+      var match: (length: Int, word: String)?
       for pattern in patterns
       where pattern.bytes.count > (match?.length ?? 0)
         && bytes.count - index >= pattern.bytes.count
         && bytes[index..<(index + pattern.bytes.count)].elementsEqual(pattern.bytes)
       {
-        match = (pattern.bytes.count, pattern.variable)
+        match = (pattern.bytes.count, pattern.word)
       }
       if let match {
         if !literal.isEmpty { pieces.append(.bytes(literal)) }
         literal = []
-        pieces.append(.variable(match.variable))
+        pieces.append(.variable(match.word))
         index += match.length
       } else {
         literal.append(bytes[index])

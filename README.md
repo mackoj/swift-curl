@@ -69,6 +69,27 @@ print(command.render(.init(layout: .multiline(indentation: "  "), substitutions:
 
 Matching is exact (Unicode scalars); where several literals match at the same place, the longest wins. The initializer returns `nil` for such a literal, or for a variable that is not a POSIX name (`[A-Za-z_][A-Za-z0-9_]*`). Pass each spelling a value can take (raw, percent-encoded, base64) as its own substitution. `ShellEscaping.quote(_:substituting:)` applies the same rule to a single word.
 
+#### Encoded spellings
+
+When the request carries the value encoded, give the encoded text as the literal and say how it was encoded. The variable still holds the plain value, and the command computes the encoded text from it, so curl receives exactly the same bytes:
+
+| `encoding` | Written as |
+|---|---|
+| `.raw` (default) | `"$NAME"` |
+| `.base64` | `"$(printf %s "$NAME" \| base64 \| tr -d '\n')"` (RFC 4648 with padding, on one line: `tr` strips GNU `base64`'s line breaks) |
+| `.percentEncoded` | `"$(printf %s "$NAME" \| od -A n -t x1 -v \| awk '…')"`: RFC 3986 unreserved bytes (`A–Z a–z 0–9 - . _ ~`) as is, every other byte as `%XX` in uppercase, like `addingPercentEncoding(withAllowedCharacters:)` with that set |
+
+```swift
+let value = "s3cr3t"
+let substitutions = [
+  ShellSubstitution(literal: value, variable: "API_TOKEN")!,
+  ShellSubstitution(
+    literal: Data(value.utf8).base64EncodedString(), variable: "API_TOKEN", encoding: .base64)!,
+]
+```
+
+Each expression is a fixed pipeline of POSIX tools (`printf`, `base64`, `tr`, `od`, `awk`) around the variable; no case takes free text, so a substitution can't inject shell code. The same expression is used inside a piped binary body. Tests run every encoding in bash, sh, dash, zsh and ksh and check the bytes curl receives.
+
 ## Behaviour
 
 | Request | Output |
