@@ -18,8 +18,10 @@ public struct CURLRenderOptions: Sendable, Hashable, Codable {
   /// Literals written as shell variables (`"$NAME"`) wherever they appear in
   /// the URL or an option value. In a binary body piped through standard
   /// input, a literal is matched on its UTF-8 bytes and written with
-  /// `printf '%s' "$NAME"` between the decoded pieces. Flags and the
-  /// executable are never substituted. Empty by default.
+  /// `printf '%s' "$NAME"` between the decoded pieces. An encoded
+  /// substitution writes its expression instead of `"$NAME"`
+  /// (``ShellSubstitution/Encoding``). Flags and the executable are never
+  /// substituted. Empty by default.
   public var substitutions: [ShellSubstitution]
 
   public init(
