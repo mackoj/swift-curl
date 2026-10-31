@@ -56,9 +56,12 @@ enum Shell {
     curl() { printf '%s\\0' "$#"; for a in "$@"; do printf '%s\\0' "$a"; done; cat; }
     """
 
-  /// Runs `command` in `shell` and returns what `curl` received.
-  static func invoke(_ command: String, shell: String = "/bin/bash") throws -> Invocation {
-    let output = try run(shell, ["-c", stub + "\n" + command])
+  /// Runs `command` in `shell`, with `environment` added to the process
+  /// environment, and returns what `curl` received.
+  static func invoke(
+    _ command: String, shell: String = "/bin/bash", environment: [String: String] = [:]
+  ) throws -> Invocation {
+    let output = try run(shell, ["-c", stub + "\n" + command], environment: environment)
     guard output.status == 0 else {
       throw Failure(description: "\(shell) exited with \(output.status): \(output.stderr)")
     }
@@ -71,11 +74,14 @@ enum Shell {
   }
 
   private static func run(
-    _ shell: String, _ arguments: [String]
+    _ shell: String, _ arguments: [String], environment: [String: String] = [:]
   ) throws -> (status: Int32, stdout: Data, stderr: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: shell)
     process.arguments = arguments
+    if !environment.isEmpty {
+      process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+    }
     let stdout = Pipe()
     let stderr = Pipe()
     process.standardOutput = stdout

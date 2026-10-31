@@ -80,30 +80,30 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
     if let standardInput {
       switch standardInput {
       case .base64(let encoded):
-        segments.append("printf '%s' " + ShellEscaping.quote(encoded))
+        segments.append(
+          "printf '%s' " + ShellEscaping.quote(encoded, substituting: format.substitutions))
         segments.append("| base64 --decode")
       }
       segments.append(
-        "| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL)
+        "| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
     } else {
-      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL)
+      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
     }
 
     for option in options {
       let (flag, value) = option.components(flagStyle: format.flagStyle)
       var segment = ShellEscaping.isPlainFlag(flag) ? flag : ShellEscaping.quote(flag)
       if let value {
-        segment += " " + ShellEscaping.quote(value)
+        segment += " " + ShellEscaping.quote(value, substituting: format.substitutions)
       }
       segments.append(segment)
     }
     return segments.joined(separator: continuation)
   }
 
-  private var renderedURL: String {
-    urlArguments.count == 2
-      ? "--url " + ShellEscaping.quote(url)
-      : ShellEscaping.quote(url)
+  private func renderedURL(_ format: CURLRenderOptions) -> String {
+    let quoted = ShellEscaping.quote(url, substituting: format.substitutions)
+    return urlArguments.count == 2 ? "--url " + quoted : quoted
   }
 
   /// The single-line rendering of the command.

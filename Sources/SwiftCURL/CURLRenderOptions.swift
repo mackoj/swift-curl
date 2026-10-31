@@ -15,10 +15,32 @@ public struct CURLRenderOptions: Sendable, Hashable, Codable {
 
   public var layout: Layout
   public var flagStyle: CURLOption.FlagStyle
+  /// Literals written as shell variables (`"$NAME"`) wherever they appear in
+  /// the URL, an option value or the standard-input payload. Flags and the
+  /// executable are never substituted. Empty by default.
+  public var substitutions: [ShellSubstitution]
 
-  public init(layout: Layout = .singleLine, flagStyle: CURLOption.FlagStyle = .short) {
+  public init(
+    layout: Layout = .singleLine,
+    flagStyle: CURLOption.FlagStyle = .short,
+    substitutions: [ShellSubstitution] = []
+  ) {
     self.layout = layout
     self.flagStyle = flagStyle
+    self.substitutions = substitutions
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case layout, flagStyle, substitutions
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    layout = try container.decode(Layout.self, forKey: .layout)
+    flagStyle = try container.decode(CURLOption.FlagStyle.self, forKey: .flagStyle)
+    // Payloads encoded before `substitutions` existed have no such key.
+    substitutions =
+      try container.decodeIfPresent([ShellSubstitution].self, forKey: .substitutions) ?? []
   }
 
   /// `curl 'https://…' -X 'POST' -H 'Accept: */*'`

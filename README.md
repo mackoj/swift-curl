@@ -54,7 +54,20 @@ command.arguments()     // the exact argv curl receives, before shell quoting
 command.render(.init(layout: .multiline(indentation: "    "), flagStyle: .long))
 ```
 
-`CURLCommand` and `CURLOption` are `Sendable`, `Hashable` and `Codable`.
+`CURLCommand`, `CURLOption`, `CURLRenderOptions` and `ShellSubstitution` are `Sendable`, `Hashable` and `Codable`.
+
+### Keeping secrets out of the command
+
+A `ShellSubstitution` writes every occurrence of a literal as a shell variable, `"$NAME"`, wherever it appears in the URL, an option value or the piped binary body. The literal parts stay single-quoted, so the command stays injection-safe, and it runs once the variable is set.
+
+```swift
+let token = ShellSubstitution(literal: "s3cr3t", variable: "API_TOKEN")!
+print(command.render(.init(layout: .multiline(indentation: "  "), substitutions: [token])))
+// curl 'https://api.example.com/users?key='"$API_TOKEN" \
+//   -H 'Authorization: Bearer '"$API_TOKEN"
+```
+
+Matching is exact (Unicode scalars); where several literals match at the same place, the longest wins. The initializer returns `nil` for an empty literal or a variable that is not a POSIX name (`[A-Za-z_][A-Za-z0-9_]*`). Pass each spelling a value can take (raw, percent-encoded, base64) as its own substitution. `ShellEscaping.quote(_:substituting:)` applies the same rule to a single word.
 
 ## Behaviour
 
