@@ -6,3 +6,6 @@ DerivedData/
 .swiftpm/
 .netrc
 Package.resolved
+/Architecture/.build
+/Benchmarks/.build
+/Benchmarks/.benchmarkBaselines
