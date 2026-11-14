@@ -139,6 +139,8 @@ struct BodyTests {
     Data([0x61, 0x1B, 0x5B, 0x32, 0x4A]),  // ESC [2J (terminal escape)
     Data([0x61, 0x7F]),  // DEL
     Data([0xC2, 0x9B]),  // C1 CSI
+    Data([0x61, 0xC2, 0x80]),  // U+0080, first C1 control
+    Data([0xC2, 0x9F, 0x61]),  // U+009F, last C1 control
     Data([0xC3, 0x28]),  // invalid UTF-8
     Data([0xFF, 0xFE]),
   ])
@@ -146,7 +148,10 @@ struct BodyTests {
     #expect(BodyText.text(from: data) == nil)
   }
 
-  @Test(arguments: ["tab\there", "crlf\r\n", "unicode é 😀 中文", "quote ' \" `"])
+  @Test(arguments: [
+    "tab\there", "crlf\r\n", "unicode é 😀 中文", "quote ' \" `",
+    "\u{A0}\u{100}\u{2080}",  // just past C1, and 0x80 bytes after other lead bytes
+  ])
   func printableTextIsText(text: String) {
     #expect(BodyText.text(from: Data(utf8: text)) == text)
   }

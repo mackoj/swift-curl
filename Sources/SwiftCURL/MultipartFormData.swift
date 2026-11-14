@@ -161,9 +161,29 @@ struct HeaderParameters {
 extension String {
   /// Strict UTF-8 decoding that works on every supported platform.
   init?<Bytes: Collection>(strictUTF8 bytes: Bytes) where Bytes.Element == UInt8 {
-    let decoded = String(decoding: bytes, as: UTF8.self)
-    guard decoded.utf8.elementsEqual(bytes) else { return nil }
-    self = decoded
+    // Decoding repairs invalid input, so it was valid exactly when nothing changed.
+    let fast = bytes.withContiguousStorageIfAvailable { buffer -> String? in
+      let decoded = String(decoding: buffer, as: UTF8.self)
+      return decoded.utf8.elementsEqual(buffer) ? decoded : nil
+    }
+    switch fast {
+    case .some(.some(let decoded)):
+      self = decoded
+    case .some(.none):
+      return nil
+    case .none:
+      let decoded = String(decoding: bytes, as: UTF8.self)
+      guard decoded.utf8.elementsEqual(bytes) else { return nil }
+      self = decoded
+    }
+  }
+
+  /// The string with native, contiguous UTF-8 storage: a string bridged from
+  /// `NSString` is otherwise read through Objective-C on every access.
+  var nativeUTF8: String {
+    var copy = self
+    copy.makeContiguousUTF8()
+    return copy
   }
 }
 

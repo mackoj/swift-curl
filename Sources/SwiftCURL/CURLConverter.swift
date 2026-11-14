@@ -26,28 +26,33 @@ public struct CURLConverter: Sendable {
     let method = request.httpMethod ?? "GET"
     guard HTTPToken.isValid(method) else { throw .invalidHTTPMethod(method) }
 
-    // Headers, sorted for deterministic output.
+    // Headers, sorted for deterministic output. Each name is lowercased once,
+    // and each field copied to native UTF-8 once: on Apple platforms the
+    // dictionary holds bridged strings, which are slow to read repeatedly.
+    let excluded = Set(options.excludedHeaders.map { $0.lowercased() })
+    let redacted = Set(options.redactedHeaders.map { $0.lowercased() })
     var headers: [(name: String, value: String)] = []
     var cookieValues: [String] = []
-    let fields = (request.allHTTPHeaderFields ?? [:]).sorted {
-      let lhs = $0.key.lowercased()
-      let rhs = $1.key.lowercased()
-      return lhs == rhs ? $0.key < $1.key : lhs < rhs
+    var fields: [HeaderField] = []
+    for (name, value) in request.allHTTPHeaderFields ?? [:] {
+      fields.append(HeaderField(name: name, value: value))
     }
-    for (name, value) in fields {
+    fields.sort(by: HeaderField.precedes)
+    for field in fields {
+      let (name, value, lowercased) = (field.name, field.value, field.lowercased)
       guard HTTPToken.isValid(name) else { throw .invalidHeaderName(name) }
       guard HTTPToken.isValidFieldValue(value) else { throw .invalidHeaderValue(name: name) }
-      if options.isExcluded(name) { continue }
-      if name.caseInsensitiveEquals("Cookie") {
+      if excluded.contains(lowercased) { continue }
+      if lowercased == "cookie" {
         cookieValues.append(value)
       } else {
-        headers.append((name, options.isRedacted(name) ? options.redactionPlaceholder : value))
+        headers.append((name, redacted.contains(lowercased) ? options.redactionPlaceholder : value))
       }
     }
 
     // Body.
     let body = try resolveBody(of: request)
-    let contentType = fields.first { $0.key.caseInsensitiveEquals("Content-Type") }?.value
+    let contentType = fields.first { $0.lowercased == "content-type" }?.value
     let bodyPlan = try plan(body: body, method: method, contentType: contentType)
     if !bodyPlan.droppedHeaders.isEmpty {
       headers.removeAll { header in
@@ -78,10 +83,10 @@ public struct CURLConverter: Sendable {
 
     // Cookies.
     cookieValues.append(contentsOf: options.additionalCookies.map { "\($0.name)=\($0.value)" })
-    if !cookieValues.isEmpty, !options.isExcluded("Cookie") {
+    if !cookieValues.isEmpty, !excluded.contains("cookie") {
       var cookie = cookieValues.joined(separator: "; ")
       guard HTTPToken.isValidFieldValue(cookie) else { throw .invalidHeaderValue(name: "Cookie") }
-      if options.isRedacted("Cookie") { cookie = options.redactionPlaceholder }
+      if redacted.contains("cookie") { cookie = options.redactionPlaceholder }
       // Without `=` curl treats the `-b` argument as a cookie file name.
       if options.cookieStrategy == .cookieFlag && cookie.contains("=") {
         result.append(.cookie(cookie))
@@ -103,6 +108,23 @@ public struct CURLConverter: Sendable {
       options: result,
       standardInput: bodyPlan.standardInput
     )
+  }
+
+  private struct HeaderField {
+    var name: String
+    var value: String
+    var lowercased: String
+
+    init(name: String, value: String) {
+      self.name = name.nativeUTF8
+      self.value = value.nativeUTF8
+      lowercased = self.name.lowercased()
+    }
+
+    /// Case-insensitive order, then case-sensitive for names equal but for case.
+    static func precedes(_ lhs: HeaderField, _ rhs: HeaderField) -> Bool {
+      lhs.lowercased == rhs.lowercased ? lhs.name < rhs.name : lhs.lowercased < rhs.lowercased
+    }
   }
 
   // MARK: - Body
@@ -265,9 +287,10 @@ enum HTTPToken {
     }
   }
 
-  /// Rejects CR, LF and NUL, which would allow header injection.
+  /// Rejects CR, LF and NUL, which would allow header injection. They are
+  /// ASCII, so their bytes never appear inside a multi-byte scalar.
   static func isValidFieldValue(_ value: String) -> Bool {
-    !value.unicodeScalars.contains { $0 == "\r" || $0 == "\n" || $0 == "\0" }
+    !value.utf8.contains { $0 == 13 || $0 == 10 || $0 == 0 }
   }
 }
 
@@ -277,14 +300,22 @@ enum BodyText {
   /// NUL, which no shell argument can carry, and terminal escape sequences)
   /// is treated as binary.
   static func text(from data: Data) -> String? {
-    guard let text = String(strictUTF8: data) else { return nil }
-    for scalar in text.unicodeScalars {
-      switch scalar.value {
-      case 0x09, 0x0A, 0x0D: continue
-      case 0x00...0x1F, 0x7F...0x9F: return nil
-      default: continue
+    // C0 controls and DEL are single bytes; C1 controls (U+0080–U+009F) are
+    // 0xC2 followed by 0x80–0x9F, and 0xC2 only ever leads a scalar. Binary
+    // data usually fails here within a few bytes, before any decoding.
+    let hasControl = data.withUnsafeBytes { bytes in
+      var previous: UInt8 = 0
+      for byte in bytes {
+        switch byte {
+        case 0x09, 0x0A, 0x0D: break
+        case 0x00...0x1F, 0x7F: return true
+        case 0x80...0x9F where previous == 0xC2: return true
+        default: break
+        }
+        previous = byte
       }
+      return false
     }
-    return text
+    return hasControl ? nil : String(strictUTF8: data)
   }
 }

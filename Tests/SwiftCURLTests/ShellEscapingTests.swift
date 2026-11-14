@@ -13,6 +13,8 @@ struct ShellEscapingTests {
     ("$HOME `id` $(id) !! \\ \"x\"", "'$HOME `id` $(id) !! \\ \"x\"'"),
     ("line1\nline2", "'line1\nline2'"),
     ("héllo 😀", "'héllo 😀'"),
+    // A quote followed by a combining mark is one Character but two scalars.
+    ("'\u{301}", #"''\''"# + "\u{301}'"),
   ])
   func quote(input: String, expected: String) {
     #expect(ShellEscaping.quote(input) == expected)

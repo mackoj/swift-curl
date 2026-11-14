@@ -133,6 +133,10 @@ struct Substituter {
 
   init(_ substitutions: [ShellSubstitution]) {
     patterns = substitutions.map { (Array($0.literal.utf8), $0.shellWord) }
+    guard !patterns.isEmpty else {
+      startsPattern = []
+      return
+    }
     var startsPattern = [Bool](repeating: false, count: 256)
     for pattern in patterns {
       if let first = pattern.bytes.first { startsPattern[Int(first)] = true }
