@@ -1,5 +1,12 @@
 # swift-curl
 
+[![CI](https://github.com/mackoj/swift-curl/actions/workflows/ci.yml/badge.svg)](https://github.com/mackoj/swift-curl/actions/workflows/ci.yml)
+
+**[Website](https://mackoj.github.io/swift-curl/)** ·
+**[Performance](docs/performance.md)** ·
+**[Architecture rules](docs/architecture-rules.md)** ·
+**[Releases](https://github.com/mackoj/swift-curl/releases)**
+
 Convert Foundation's `URLRequest` into **safe, executable `curl` commands**.
 
 `swift-curl` turns a request into a typed `CURLCommand` that you can inspect or change, then renders it as a shell command. It does not wrap `libcurl` and it is not an HTTP client.
@@ -8,16 +15,20 @@ Convert Foundation's `URLRequest` into **safe, executable `curl` commands**.
 - **Foundation only**, no third-party dependencies. Runs on Apple platforms and Linux.
 - **Injection-safe**: every value is wrapped in single quotes, and embedded quotes are escaped as POSIX `'\''`. Double quotes are never used for quoting.
 - **Verified in real shells**: the test suite runs the generated commands in bash, sh/dash, zsh and ksh, and checks the exact argv curl receives.
+- **Guarded by rules**: [architecture rules](docs/architecture-rules.md) fail the build if any code but `ShellEscaping` writes quoting, or a `$` appears outside `ShellSubstitution`.
+- **Fast on large bodies**: rendering a 1 MB JSON body takes 1.5 ms, quoting is linear ([benchmarks](docs/performance.md)).
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/mackoj/swift-curl.git", from: "0.1.0"),
+.package(url: "https://github.com/mackoj/swift-curl.git", from: "0.3.1"),
 ```
 
 ```swift
 .target(name: "MyTarget", dependencies: [.product(name: "SwiftCURL", package: "swift-curl")]),
 ```
+
+Requires Swift 6.0+. Platforms: macOS 13+, iOS 16+, tvOS 16+, watchOS 9+, visionOS 1+, and Linux.
 
 ## Usage
 
@@ -136,10 +147,14 @@ Presets: `.default` (faithful) and `.logging` (redacts `Authorization`, `Proxy-A
 
 `.singleLine` puts each argument on one line. Arguments that contain newlines, such as pretty-printed JSON, keep those newlines inside their single quotes. The command is still one valid shell command.
 
-## Testing
+## Development
 
 ```bash
-swift test
+swift test                                    # the library's tests
+swift test --package-path Architecture        # architecture rules (macOS)
+swift package --package-path Benchmarks benchmark   # benchmarks (macOS 15, jemalloc)
 ```
+
+Coding conventions are in [CODING_STANDARDS.md](CODING_STANDARDS.md); their mechanical part is enforced by `Architecture/` with [swift-llm-check](https://github.com/mackoj/swift-llm-check) and listed in [docs/architecture-rules.md](docs/architecture-rules.md). Measuring, comparing and profiling are described in [docs/performance.md](docs/performance.md). `site/index.html` is the [website](https://mackoj.github.io/swift-curl/), published by `.github/workflows/pages.yml`.
 
 The suite uses Swift Testing. `ShellRoundTripTests` replaces `curl` with a shell function that dumps its argv and stdin. It runs each command in every POSIX shell installed on the machine. It checks that the arguments match `CURLCommand.arguments()` exactly, and that hostile and fuzzed input (`$()`, backticks, `!!`, quotes, newlines, Unicode) is never expanded.
