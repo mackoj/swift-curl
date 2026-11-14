@@ -78,7 +78,10 @@ for frames in reader.samples where !frames.isEmpty {
   guard !frames.contains(where: { $0.contains(measuring) }) else { continue }
   total += 1
   selfSamples[short(frames[0]), default: 0] += 1
-  for name in Set(frames.map(short)) where name.contains(/CURL|Shell|Substituter|BodyText|HTTPToken|Multipart|HeaderParameters|URLRequest/) {
+  for name in Set(frames.map(short))
+  where name.contains(
+    /CURL|Shell|Substituter|BodyText|HTTPToken|Multipart|HeaderParameters|URLRequest/)
+  {
     inclusiveSamples[name, default: 0] += 1
   }
 }
