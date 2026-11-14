@@ -123,17 +123,4 @@ enum Detect {
     signature.parameterClause.parameters.first?.firstName.text
   }
 
-  // MARK: Testing
-
-  /// `import XCTest`.
-  static func xcTestImports(in scope: Scope) -> [Match<ImportDeclSyntax>] {
-    scope.imports(of: "XCTest")
-  }
-
-  /// The `.disabled(…)` trait, wherever a test or suite takes it.
-  static func disabledTests(in scope: Scope) -> [Match<FunctionCallExprSyntax>] {
-    scope.calls(named: "disabled").filter { call in
-      call.node.receiver == nil && call.node.calledExpression.is(MemberAccessExprSyntax.self)
-    }
-  }
 }
