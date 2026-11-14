@@ -129,25 +129,25 @@ let benchmarks: @Sendable () -> Void = {
   // MARK: Conversion and rendering
 
   let simpleGET = Fixtures.simpleGET
-  Benchmark("curl(), simple GET", configuration: perOperation) { benchmark in
+  Benchmark("Convert and render, simple GET", configuration: perOperation) { benchmark in
     for _ in benchmark.scaledIterations { blackHole(try simpleGET.curl()) }
   }
 
-  Benchmark("curlDescription, simple GET", configuration: perOperation) { benchmark in
+  Benchmark("Log description, simple GET", configuration: perOperation) { benchmark in
     for _ in benchmark.scaledIterations { blackHole(simpleGET.curlDescription) }
   }
 
   let manyHeaders = Fixtures.manyHeaders
-  Benchmark("curl(), 50 headers") { benchmark in
+  Benchmark("Convert and render, 50 headers") { benchmark in
     for _ in 0..<100 { blackHole(try manyHeaders.curl(format: .multiline)) }
   }
 
-  Benchmark("curlDescription, 50 headers (logging preset)") { benchmark in
+  Benchmark("Log description, 50 headers") { benchmark in
     for _ in 0..<100 { blackHole(manyHeaders.curlDescription) }
   }
 
   let jsonBody = Fixtures.jsonBody
-  Benchmark("curl(), 1 MB JSON body") { benchmark in
+  Benchmark("Convert and render, 1 MB JSON body") { benchmark in
     blackHole(try jsonBody.curl())
   }
 
@@ -157,7 +157,7 @@ let benchmarks: @Sendable () -> Void = {
   }
 
   let binaryBody = Fixtures.binaryBody
-  Benchmark("curl(), 1 MB binary body") { benchmark in
+  Benchmark("Convert and render, 1 MB binary body") { benchmark in
     blackHole(try binaryBody.curl())
   }
 
@@ -169,12 +169,12 @@ let benchmarks: @Sendable () -> Void = {
   // MARK: Quoting
 
   let adversarial = Fixtures.adversarial
-  Benchmark("ShellEscaping.quote, 64 KB adversarial") { benchmark in
+  Benchmark("Quote, 64 KB adversarial") { benchmark in
     blackHole(ShellEscaping.quote(adversarial))
   }
 
   let shortValues = ["application/json", "Bearer abc.def.ghi", "it's", "", "$(id)", "é ü 中文 😀"]
-  Benchmark("ShellEscaping.quote, short values", configuration: perOperation) { benchmark in
+  Benchmark("Quote, short values", configuration: perOperation) { benchmark in
     for _ in benchmark.scaledIterations {
       for value in shortValues { blackHole(ShellEscaping.quote(value)) }
     }
@@ -183,11 +183,11 @@ let benchmarks: @Sendable () -> Void = {
   // MARK: Substitutions
 
   let tokenText = Fixtures.adversarial + Fixtures.token + Fixtures.adversarial
-  Benchmark("quote(substituting:), 128 KB, one match") { benchmark in
+  Benchmark("Quote with substitutions, 128 KB, one match") { benchmark in
     blackHole(ShellEscaping.quote(tokenText, substituting: Fixtures.encodedSubstitutions))
   }
 
-  Benchmark("quote(substituting:), 64 KB, no match") { benchmark in
+  Benchmark("Quote with substitutions, 64 KB, no match") { benchmark in
     blackHole(ShellEscaping.quote(adversarial, substituting: Fixtures.tokenSubstitution))
   }
 
