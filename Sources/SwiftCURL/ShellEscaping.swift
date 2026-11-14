@@ -19,17 +19,43 @@ public enum ShellEscaping {
   ///   containing NUL; binary payloads are routed through standard input
   ///   instead (see ``CURLConversionOptions/BinaryBodyStrategy``).
   public static func quote(_ value: String) -> String {
-    var result = "'"
-    result.reserveCapacity(value.utf8.count + 2)
-    for character in value.unicodeScalars {
-      if character == "'" {
-        result.unicodeScalars.append(contentsOf: #"'\''"#.unicodeScalars)
+    if let quoted = value.utf8.withContiguousStorageIfAvailable(quote) { return quoted }
+    return Array(value.utf8).withUnsafeBufferPointer(quote)
+  }
+
+  /// Quotes valid UTF-8. `'` is ASCII, so it is never part of a multi-byte
+  /// sequence: replacing that byte keeps the text valid and changes nothing
+  /// else, scalar for scalar.
+  static func quote(_ bytes: UnsafeBufferPointer<UInt8>) -> String {
+    let quote = UInt8(ascii: "'")
+    var quotes = 0
+    for byte in bytes where byte == quote { quotes += 1 }
+    // Each `'` becomes the four bytes `'\''`.
+    return String(unsafeUninitializedCapacity: bytes.count + 2 + 3 * quotes) { buffer in
+      buffer[0] = quote
+      var count = 1
+      if quotes == 0 {
+        if let base = bytes.baseAddress {
+          (buffer.baseAddress! + 1).initialize(from: base, count: bytes.count)
+        }
+        count += bytes.count
       } else {
-        result.unicodeScalars.append(character)
+        for byte in bytes {
+          if byte == quote {
+            buffer[count] = quote
+            buffer[count + 1] = UInt8(ascii: "\\")
+            buffer[count + 2] = quote
+            buffer[count + 3] = quote
+            count += 4
+          } else {
+            buffer[count] = byte
+            count += 1
+          }
+        }
       }
+      buffer[count] = quote
+      return count + 1
     }
-    result.unicodeScalars.append("'")
-    return result
   }
 
   /// Quotes `value` as one shell word, writing each occurrence of a
@@ -51,34 +77,7 @@ public enum ShellEscaping {
     _ value: String, substituting substitutions: [ShellSubstitution]
   ) -> String {
     guard !substitutions.isEmpty else { return quote(value) }
-    let patterns = substitutions.map {
-      (scalars: Array($0.literal.unicodeScalars), word: $0.shellWord)
-    }
-    let scalars = Array(value.unicodeScalars)
-    var result = ""
-    var literal = String.UnicodeScalarView()
-    var index = 0
-    while index < scalars.count {
-      var match: (length: Int, word: String)?
-      for pattern in patterns
-      where pattern.scalars.count > (match?.length ?? 0)
-        && scalars.count - index >= pattern.scalars.count
-        && scalars[index..<(index + pattern.scalars.count)].elementsEqual(pattern.scalars)
-      {
-        match = (pattern.scalars.count, pattern.word)
-      }
-      if let match {
-        if !literal.isEmpty { result += quote(String(literal)) }
-        literal = String.UnicodeScalarView()
-        result += match.word
-        index += match.length
-      } else {
-        literal.append(scalars[index])
-        index += 1
-      }
-    }
-    if !literal.isEmpty || result.isEmpty { result += quote(String(literal)) }
-    return result
+    return Substituter(substitutions).quote(value)
   }
 
   /// Returns `true` when `value` is non-empty and made only of characters that
@@ -119,5 +118,70 @@ public enum ShellEscaping {
     case "_", "-", ".", "/", ":", ",", "+", "=", "@", "%": return true
     default: return false
     }
+  }
+}
+
+/// The substitutions of one rendering, prepared once: each literal's UTF-8
+/// bytes and shell word, and which bytes can start a literal.
+///
+/// Matching on UTF-8 bytes is matching on Unicode scalars: a literal starts
+/// with a scalar's first byte, which in valid UTF-8 only ever starts a scalar,
+/// and ends with a scalar's last byte, so a byte match spans whole scalars.
+struct Substituter {
+  private let patterns: [(bytes: [UInt8], word: String)]
+  private let startsPattern: [Bool]
+
+  init(_ substitutions: [ShellSubstitution]) {
+    patterns = substitutions.map { (Array($0.literal.utf8), $0.shellWord) }
+    var startsPattern = [Bool](repeating: false, count: 256)
+    for pattern in patterns {
+      if let first = pattern.bytes.first { startsPattern[Int(first)] = true }
+    }
+    self.startsPattern = startsPattern
+  }
+
+  var isEmpty: Bool { patterns.isEmpty }
+
+  /// The longest literal at `index`, then the first given.
+  func match(in bytes: UnsafeBufferPointer<UInt8>, at index: Int) -> (length: Int, word: String)? {
+    guard startsPattern[Int(bytes[index])] else { return nil }
+    var match: (length: Int, word: String)?
+    for pattern in patterns
+    where pattern.bytes.count > (match?.length ?? 0)
+      && bytes.count - index >= pattern.bytes.count
+      && UnsafeBufferPointer(rebasing: bytes[index..<(index + pattern.bytes.count)])
+        .elementsEqual(pattern.bytes)
+    {
+      match = (pattern.bytes.count, pattern.word)
+    }
+    return match
+  }
+
+  /// ``ShellEscaping/quote(_:substituting:)``.
+  func quote(_ value: String) -> String {
+    if let quoted = value.utf8.withContiguousStorageIfAvailable(quote) { return quoted }
+    return Array(value.utf8).withUnsafeBufferPointer(quote)
+  }
+
+  private func quote(_ bytes: UnsafeBufferPointer<UInt8>) -> String {
+    var result = ""
+    var literalStart = 0
+    var index = 0
+    while index < bytes.count {
+      if let match = match(in: bytes, at: index) {
+        if literalStart < index {
+          result += ShellEscaping.quote(UnsafeBufferPointer(rebasing: bytes[literalStart..<index]))
+        }
+        result += match.word
+        index += match.length
+        literalStart = index
+      } else {
+        index += 1
+      }
+    }
+    if literalStart < bytes.count || result.isEmpty {
+      result += ShellEscaping.quote(UnsafeBufferPointer(rebasing: bytes[literalStart...]))
+    }
+    return result
   }
 }
