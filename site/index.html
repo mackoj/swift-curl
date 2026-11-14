@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swift-curl · URLRequest to safe curl</title>
+<meta name="description" content="A Swift library that converts Foundation's URLRequest into curl commands that are safe to paste into any POSIX shell: every value single-quoted, secrets kept out as shell variables, binary bodies piped byte-exact. Swift 6, Sendable, Apple platforms and Linux, no dependencies.">
+<meta property="og:title" content="swift-curl · URLRequest to safe curl">
+<meta property="og:description" content="Turn any URLRequest into a curl command you can paste into bash, zsh, sh or ksh without anything being expanded. Typed model, secret substitution, byte-exact binary bodies. Swift 6, no dependencies.">
+<meta property="og:type" content="website">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23178a52'/%3E%3Cpath d='M8 11l5 5-5 5' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 22h8' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f8faf8;
+  --surface: #ffffff;
+  --surface-2: #eef3ef;
+  --text: #16201a;
+  --muted: #4f5c54;
+  --line: #dbe4dd;
+  --accent: #178a52;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcf1e5;
+  --danger: #c2410c;
+  --danger-soft: #fde8dc;
+  --code-bg: #0f1612;
+  --code-text: #e4ece6;
+  --code-muted: #7f9186;
+  --tok-key: #7ee2a8;
+  --tok-str: #f5d48a;
+  --tok-type: #8ccaf7;
+  --tok-var: #f59e8b;
+  --shadow: 0 1px 2px rgb(22 32 26 / 6%), 0 8px 24px rgb(22 32 26 / 7%);
+  --radius: 14px;
+  --max: 1120px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1310;
+    --surface: #151c18;
+    --surface-2: #1b241f;
+    --text: #e8efe9;
+    --muted: #9eaca3;
+    --line: #29342d;
+    --accent: #3ccf85;
+    --accent-ink: #062012;
+    --accent-soft: #163626;
+    --danger: #fb923c;
+    --danger-soft: #3a2113;
+    --code-bg: #080c0a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 28%);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1310;
+  --surface: #151c18;
+  --surface-2: #1b241f;
+  --text: #e8efe9;
+  --muted: #9eaca3;
+  --line: #29342d;
+  --accent: #3ccf85;
+  --accent-ink: #062012;
+  --accent-soft: #163626;
+  --danger: #fb923c;
+  --danger-soft: #3a2113;
+  --code-bg: #080c0a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 28%);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+code, pre { font: 14px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.grid > *, .install > *, .features > *, .examples > *, .compare > *, .proof > * { min-width: 0; }
+:not(pre) > code { overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: .05em .35em; font-size: .88em; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 20px; }
+@media (max-width: 480px) { .wrap { padding: 0 16px; } }
+section { padding: 88px 0; }
+section + section { border-top: 1px solid var(--line); }
+h1, h2, h3 { line-height: 1.15; letter-spacing: -.02em; margin: 0; }
+h2 { font-size: clamp(28px, 4vw, 40px); }
+h3 { font-size: 19px; letter-spacing: -.01em; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+.lead { color: var(--muted); font-size: 19px; max-width: 700px; margin: 16px 0 0; }
+
+nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+nav .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+nav .links { display: flex; gap: 22px; margin-left: auto; font-size: 15px; }
+nav .links a { color: var(--muted); text-decoration: none; }
+nav .links a:hover { color: var(--text); }
+@media (max-width: 720px) { nav .links a:not(.gh) { display: none; } }
+
+.hero { position: relative; overflow: hidden; padding: 96px 0 88px; }
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; opacity: .55;
+  background: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 1.5px) 0 0 / 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 70% 30%, #000 10%, transparent 75%);
+}
+.hero .grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
+@media (max-width: 960px) { .hero .grid { grid-template-columns: 1fr; gap: 40px; } }
+.hero h1 { font-size: clamp(38px, 6vw, 62px); }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; padding: 0; list-style: none; }
+.pills li { font-size: 13px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.button { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.button:hover { filter: brightness(1.05); }
+.button svg { width: 18px; height: 18px; }
+
+.code { background: var(--code-bg); color: var(--code-text); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.code + .code { margin-top: 14px; }
+.code .bar { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-bottom: 1px solid rgb(255 255 255 / 7%); color: var(--code-muted); font-size: 13px; }
+.code .bar i { width: 11px; height: 11px; border-radius: 50%; background: #2c3631; display: inline-block; }
+.code .bar span { margin-left: 8px; }
+.code pre { margin: 0; padding: 18px 20px; overflow-x: auto; }
+.hero .code pre { font-size: 13.5px; }
+.k { color: var(--tok-key); }
+.s { color: var(--tok-str); }
+.t { color: var(--tok-type); }
+.v { color: var(--tok-var); }
+.c { color: var(--code-muted); font-style: italic; }
+.p { color: var(--code-muted); user-select: none; }
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 44px; }
+@media (max-width: 860px) { .compare { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+.panel .tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 12px; }
+.panel.bad .tag { background: var(--danger-soft); color: var(--danger); }
+.panel.good .tag { background: var(--accent-soft); color: var(--accent); }
+.panel p { color: var(--muted); font-size: 15.5px; margin: 10px 0 14px; }
+.panel ul { color: var(--muted); font-size: 15.5px; margin: 14px 0 0; padding-left: 20px; }
+.panel .code pre { font-size: 13px; }
+
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+@media (max-width: 960px) { .features { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .features { grid-template-columns: 1fr; } }
+.feature { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+.feature .icon { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-bottom: 14px; }
+.feature .icon svg { width: 22px; height: 22px; }
+.feature p { color: var(--muted); font-size: 15.5px; margin: 8px 0 0; }
+
+.examples { display: grid; grid-template-columns: 1fr; gap: 44px; margin-top: 44px; }
+.example { display: grid; grid-template-columns: 1fr 1.6fr; gap: 28px; align-items: start; }
+@media (max-width: 900px) { .example { grid-template-columns: 1fr; gap: 16px; } }
+.example p { color: var(--muted); font-size: 16px; margin: 10px 0 0; }
+
+.proof { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 44px; align-items: start; }
+@media (max-width: 900px) { .proof { grid-template-columns: 1fr; } }
+.proof ul { color: var(--muted); padding-left: 20px; margin: 0; }
+.proof li + li { margin-top: 10px; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+td.win { color: var(--accent); font-weight: 600; }
+.note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+.install { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 40px; }
+@media (max-width: 860px) { .install { grid-template-columns: 1fr; } }
+.reqs { color: var(--muted); font-size: 15.5px; margin-top: 20px; }
+
+footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--muted); font-size: 15px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; }
+footer .links { display: flex; flex-wrap: wrap; gap: 18px; margin-left: auto; }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="swift-curl home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M8 11l5 5-5 5" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 22h8" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round"/></svg>
+      swift-curl
+    </a>
+    <div class="links">
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#examples">Examples</a>
+      <a href="#proof">Proof</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/mackoj/swift-curl">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap grid">
+    <div>
+      <ul class="pills">
+        <li>Swift 6</li>
+        <li>Apple platforms + Linux</li>
+        <li>No dependencies</li>
+      </ul>
+      <h1><code style="all: unset">URLRequest</code> in,<br><em>safe curl</em> out.</h1>
+      <p class="lead">swift-curl turns any Foundation request into a curl command you can paste into bash, zsh, sh or ksh,
+        and curl receives exactly the request you built. Quotes, <code>$</code>, backticks, newlines and binary bytes
+        included. Nothing is ever expanded.</p>
+      <div class="cta">
+        <a class="button primary" href="#install">Add the package</a>
+        <a class="button" href="https://github.com/mackoj/swift-curl">
+          <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Source on GitHub
+        </a>
+      </div>
+    </div>
+    <div>
+      <div class="code">
+        <div class="bar"><i></i><i></i><i></i><span>Request.swift</span></div>
+<pre><span class="k">import</span> SwiftCURL
+
+<span class="k">var</span> request = <span class="t">URLRequest</span>(url: <span class="t">URL</span>(string: <span class="s">"https://api.example.com/users"</span>)!)
+request.httpMethod = <span class="s">"POST"</span>
+request.setValue(<span class="s">"application/json"</span>, forHTTPHeaderField: <span class="s">"Content-Type"</span>)
+request.httpBody = <span class="t">Data</span>(<span class="s">#"{"name":"O'Brien"}"#</span>.utf8)
+
+print(<span class="k">try</span> request.curl(format: .multiline))</pre>
+      </div>
+      <div class="code">
+        <div class="bar"><i></i><i></i><i></i><span>Output</span></div>
+<pre>curl <span class="s">'https://api.example.com/users'</span> \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  --data-raw <span class="s">'{"name":"O'</span>\'<span class="s">'Brien"}'</span></pre>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <p class="eyebrow">The problem</p>
+    <h2>“Copy as cURL” is string interpolation into a shell.</h2>
+    <p class="lead">Every app that logs requests as curl ends up writing the same few lines, and they work until a value
+      contains an apostrophe, a <code>$</code> or a newline. Then the command breaks, or worse, the shell runs part of
+      it.</p>
+    <div class="compare">
+      <div class="panel bad">
+        <span class="tag">Hand-rolled</span>
+        <div class="code">
+<pre><span class="k">let</span> header = <span class="s">"-H \"</span>\(name): \(value)<span class="s">\""</span>
+<span class="k">let</span> body = <span class="s">"-d '</span>\(text)<span class="s">'"</span></pre>
+        </div>
+        <ul>
+          <li>Double quotes expand <code>$HOME</code>, <code>$(…)</code> and backticks from header values.</li>
+          <li>An apostrophe in a JSON body closes the single quote and leaves the rest to the shell.</li>
+          <li><code>-d @file</code> makes curl read a local file; <code>-X HEAD</code> hangs waiting for a body.</li>
+          <li>NUL and other binary bytes cannot travel in an argument at all.</li>
+        </ul>
+      </div>
+      <div class="panel good">
+        <span class="tag">swift-curl</span>
+        <div class="code">
+<pre><span class="k">var</span> request = <span class="t">URLRequest</span>(url: <span class="t">URL</span>(string: <span class="s">"https://example.com/search?q=$(whoami)"</span>)!)
+request.setValue(<span class="s">"`rm -rf ~`; echo $HOME"</span>, forHTTPHeaderField: <span class="s">"X-Note"</span>)
+print(<span class="k">try</span> request.curl())
+<span class="c">// curl 'https://example.com/search?q=$(whoami)' -H 'X-Note: `rm -rf ~`; echo $HOME'</span></pre>
+        </div>
+        <ul>
+          <li>Every value is single-quoted, where no POSIX shell expands anything; <code>'</code> becomes <code>'\''</code>.</li>
+          <li>Text bodies use <code>--data-raw</code>, so a leading <code>@</code> is never a file name.</li>
+          <li>Binary bodies are piped through <code>base64 --decode</code>, byte-exact.</li>
+          <li>Methods and header names outside the RFC 9110 token set, and CR/LF in values, throw instead of rendering.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">What you get</p>
+    <h2>A typed command, not a string.</h2>
+    <p class="lead">Conversion produces a <code>CURLCommand</code>: inspect it, append options, read the exact argv curl
+      will receive, then render it the way you want.</p>
+    <div class="features">
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>Injection-safe by construction</h3>
+        <p>One quoting function, single quotes only. The only <code>$</code> ever emitted is a variable you asked for.
+          Architecture rules keep it that way.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div>
+        <h3>Secrets stay out</h3>
+        <p><code>ShellSubstitution</code> writes a token as <code>"$API_TOKEN"</code>, even when it appears base64 or
+          percent-encoded. Share the command, not the credential.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M17 15l3 3-3 3"/></svg></div>
+        <h3>Logging that never throws</h3>
+        <p><code>request.curlDescription</code> redacts <code>Authorization</code>, cookies and API keys, omits binary and
+          streamed bodies, and degrades to an inert shell comment.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16H7z"/><path d="M10 8h4M10 12h4M10 16h2"/></svg></div>
+        <h3>Byte-exact bodies</h3>
+        <p>UTF-8 text goes in <code>--data-raw</code>; anything with NUL or control bytes is piped through base64.
+          Multipart can stay raw or become <code>--form-string</code> / <code>-F</code> fields.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></div>
+        <h3>curl's quirks handled</h3>
+        <p><code>-I</code> for HEAD, no redundant <code>-X</code>, <code>-g</code> for URLs with brackets,
+          <code>--url</code> for URLs starting with <code>-</code>, <code>Name;</code> for empty header values.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L4 14h7l-1 7 9-11h-7z"/></svg></div>
+        <h3>Swift 6, everywhere</h3>
+        <p><code>Sendable</code>, <code>Hashable</code> and <code>Codable</code> models, typed throws, Foundation only.
+          macOS, iOS, tvOS, watchOS, visionOS and Linux.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="examples">
+  <div class="wrap">
+    <p class="eyebrow">Examples</p>
+    <h2>Real output, from the current release.</h2>
+    <div class="examples">
+      <div class="example">
+        <div>
+          <h3>Keep a token out of the command</h3>
+          <p>Every occurrence of the literal, in the URL or any option value, becomes a double-quoted variable
+            reference. The literal parts stay single-quoted, and the command runs once the variable is set.</p>
+        </div>
+        <div>
+          <div class="code">
+<pre><span class="k">var</span> request = <span class="t">URLRequest</span>(url: <span class="t">URL</span>(string: <span class="s">"https://api.example.com/users?key=s3cr3t"</span>)!)
+request.setValue(<span class="s">"Bearer s3cr3t"</span>, forHTTPHeaderField: <span class="s">"Authorization"</span>)
+
+<span class="k">let</span> token = <span class="t">ShellSubstitution</span>(literal: <span class="s">"s3cr3t"</span>, variable: <span class="s">"API_TOKEN"</span>)!
+print(<span class="k">try</span> request.curlCommand().render(.init(layout: .multiline(indentation: <span class="s">"  "</span>), substitutions: [token])))</pre>
+          </div>
+          <div class="code">
+<pre>curl <span class="s">'https://api.example.com/users?key='</span><span class="v">"$API_TOKEN"</span> \
+  -H <span class="s">'Authorization: Bearer '</span><span class="v">"$API_TOKEN"</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div>
+          <h3>Encoded spellings too</h3>
+          <p>HTTP Basic carries the credentials base64-encoded. Give the encoded text and its encoding: the command
+            computes it from the plain value with POSIX tools, so curl receives the same bytes.</p>
+        </div>
+        <div>
+          <div class="code">
+<pre><span class="k">let</span> basic = <span class="t">Data</span>(<span class="s">"alice:s3cr3t"</span>.utf8).base64EncodedString()
+request.setValue(<span class="s">"Basic "</span> + basic, forHTTPHeaderField: <span class="s">"Authorization"</span>)
+<span class="k">let</span> credentials = <span class="t">ShellSubstitution</span>(literal: basic, variable: <span class="s">"CREDENTIALS"</span>, encoding: .base64)!
+print(<span class="k">try</span> request.curlCommand().render(.init(substitutions: [credentials])))</pre>
+          </div>
+          <div class="code">
+<pre>curl <span class="s">'https://api.example.com/me'</span> -H <span class="s">'Authorization: Basic '</span><span class="v">"$(printf %s "$CREDENTIALS" | base64 | tr -d '\n')"</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div>
+          <h3>Log every request, safely</h3>
+          <p>A never-throwing description built from the <code>.logging</code> preset: credentials redacted, binary and
+            streamed bodies omitted.</p>
+        </div>
+        <div>
+          <div class="code">
+<pre>request.setValue(<span class="s">"Bearer eyJhbGciOi.secret"</span>, forHTTPHeaderField: <span class="s">"Authorization"</span>)
+request.setValue(<span class="s">"session=abc123"</span>, forHTTPHeaderField: <span class="s">"Cookie"</span>)
+logger.debug(<span class="s">"\(</span>request.curlDescription<span class="s">)"</span>)
+<span class="c">// curl 'https://api.example.com/me' -H 'Authorization: REDACTED' -H 'Cookie: REDACTED'</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div>
+          <h3>Binary bodies, byte for byte</h3>
+          <p>A NUL byte can never be part of a shell argument, so binary data is piped into curl's standard input.</p>
+        </div>
+        <div>
+          <div class="code">
+<pre>request.httpMethod = <span class="s">"PUT"</span>
+request.setValue(<span class="s">"image/png"</span>, forHTTPHeaderField: <span class="s">"Content-Type"</span>)
+request.httpBody = <span class="t">Data</span>([<span class="t">0x89</span>, <span class="t">0x50</span>, <span class="t">0x4E</span>, <span class="t">0x47</span>, <span class="t">0x00</span>, <span class="t">0x0D</span>, <span class="t">0x0A</span>, <span class="t">0x1A</span>])
+print(<span class="k">try</span> request.curl(format: .multiline))</pre>
+          </div>
+          <div class="code">
+<pre>printf <span class="s">'%s'</span> <span class="s">'iVBORwANCho='</span> \
+  | base64 --decode \
+  | curl <span class="s">'https://api.example.com/upload'</span> \
+  -X <span class="s">'PUT'</span> \
+  -H <span class="s">'Content-Type: image/png'</span> \
+  --data-binary <span class="s">'@-'</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="example">
+        <div>
+          <h3>Work with the model</h3>
+          <p>Options for conversion, options for rendering, and the exact argv curl will see after the shell removes
+            the quoting.</p>
+        </div>
+        <div>
+          <div class="code">
+<pre><span class="k">var</span> command = <span class="k">try</span> request.curlCommand(options: .init {
+  $0.followRedirects = <span class="k">true</span>
+  $0.compressed = <span class="k">true</span>
+})
+command.options.append(.verbose)
+
+command.arguments()
+<span class="c">// ["https://api.example.com/users", "-X", "DELETE", "-L", "--compressed", "-v"]</span>
+command.render(.init(layout: .multiline(indentation: <span class="s">"  "</span>), flagStyle: .long))
+<span class="c">// curl 'https://api.example.com/users' \</span>
+<span class="c">//   --request 'DELETE' \</span>
+<span class="c">//   --location \</span>
+<span class="c">//   --compressed \</span>
+<span class="c">//   --verbose</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="proof">
+  <div class="wrap">
+    <p class="eyebrow">Proof, not promises</p>
+    <h2>Run in real shells. Measured. Checked.</h2>
+    <div class="proof">
+      <ul>
+        <li><strong>Real shells.</strong> The test suite replaces <code>curl</code> with a function that dumps its argv
+          and standard input, then runs every generated command in bash, sh/dash, zsh and ksh. Hostile and fuzzed input
+          (<code>$()</code>, backticks, <code>!!</code>, quotes, newlines, Unicode) must arrive intact.</li>
+        <li><strong>Architecture rules.</strong> <a href="https://github.com/mackoj/swift-llm-check">swift-llm-check</a>
+          tests fail the build if any code but <code>ShellEscaping</code> writes quoting, if a <code>$</code> appears
+          outside <code>ShellSubstitution</code>, or if a value is ever left unquoted.
+          <a href="https://github.com/mackoj/swift-curl/blob/main/docs/architecture-rules.md">All rules</a>.</li>
+        <li><strong>Benchmarks.</strong> Conversion and rendering are measured with
+          <a href="https://github.com/ordo-one/package-benchmark">package-benchmark</a>: wall clock, CPU, mallocs, peak
+          memory. <a href="https://github.com/mackoj/swift-curl/blob/main/docs/performance.md">Method and results</a>.</li>
+      </ul>
+      <div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Release build, p50</th><th>0.3.0</th><th>0.3.1</th></tr></thead>
+            <tbody>
+              <tr><td>Render a 1 MB JSON body</td><td class="num">172 ms</td><td class="num win">1.5 ms</td></tr>
+              <tr><td>Convert a 1 MB binary body</td><td class="num">70 ms</td><td class="num win">1.1 ms</td></tr>
+              <tr><td>Quote 64 KB of hostile text</td><td class="num">7.7 ms</td><td class="num win">0.1 ms</td></tr>
+              <tr><td>Convert, 50 headers</td><td class="num">192 µs</td><td class="num win">114 µs</td></tr>
+              <tr><td>Convert, simple GET</td><td class="num">5.1 µs</td><td class="num win">3.2 µs</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Apple M5 Pro. Same output, byte for byte: quoting was quadratic in 0.3.0.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>One package, no dependencies.</h2>
+    <div class="install">
+      <div class="code">
+        <div class="bar"><i></i><i></i><i></i><span>Package.swift</span></div>
+<pre>dependencies: [
+  .package(url: <span class="s">"https://github.com/mackoj/swift-curl.git"</span>, from: <span class="s">"0.3.1"</span>),
+],
+targets: [
+  .target(name: <span class="s">"MyTarget"</span>, dependencies: [
+    .product(name: <span class="s">"SwiftCURL"</span>, package: <span class="s">"swift-curl"</span>),
+  ]),
+]</pre>
+      </div>
+      <div>
+        <div class="code">
+          <div class="bar"><i></i><i></i><i></i><span>Anywhere</span></div>
+<pre><span class="k">import</span> SwiftCURL
+
+<span class="k">let</span> shell = <span class="k">try</span> request.curl()
+<span class="k">let</span> line = request.curlDescription  <span class="c">// for logs</span></pre>
+        </div>
+        <p class="reqs">Swift 6.0 or later. macOS 13, iOS 16, tvOS 16, watchOS 9, visionOS 1, and Linux.
+          Read the <a href="https://github.com/mackoj/swift-curl#readme">README</a> for every conversion option and the
+          full behaviour table.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>swift-curl, by <a href="https://github.com/mackoj">mackoj</a>.</span>
+    <div class="links">
+      <a href="https://github.com/mackoj/swift-curl">GitHub</a>
+      <a href="https://github.com/mackoj/swift-curl/releases">Releases</a>
+      <a href="https://github.com/mackoj/swift-curl/blob/main/docs/performance.md">Performance</a>
+      <a href="https://github.com/mackoj/swift-curl/blob/main/docs/architecture-rules.md">Architecture rules</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
