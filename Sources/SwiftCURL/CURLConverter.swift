@@ -29,12 +29,14 @@ public struct CURLConverter: Sendable {
     // Headers, sorted for deterministic output. Each name is lowercased once,
     // and each field copied to native UTF-8 once: on Apple platforms the
     // dictionary holds bridged strings, which are slow to read repeatedly.
-    let excluded = Set(options.excludedHeaders.map { $0.lowercased() })
-    let redacted = Set(options.redactedHeaders.map { $0.lowercased() })
+    let headerFields = request.allHTTPHeaderFields ?? [:]
+    let hasHeaders = !headerFields.isEmpty || !options.additionalCookies.isEmpty
+    let excluded = hasHeaders ? Set(options.excludedHeaders.map { $0.lowercased() }) : []
+    let redacted = hasHeaders ? Set(options.redactedHeaders.map { $0.lowercased() }) : []
     var headers: [(name: String, value: String)] = []
     var cookieValues: [String] = []
     var fields: [HeaderField] = []
-    for (name, value) in request.allHTTPHeaderFields ?? [:] {
+    for (name, value) in headerFields {
       fields.append(HeaderField(name: name, value: value))
     }
     fields.sort(by: HeaderField.precedes)

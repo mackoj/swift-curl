@@ -98,11 +98,23 @@ public enum ShellEscaping {
   /// Returns `true` when `flag` looks like a command-line flag
   /// (`-X`, `--data-raw`, `--http1.1`) and may be emitted unquoted.
   static func isPlainFlag(_ flag: String) -> Bool {
-    let scalars = Array(flag.unicodeScalars)
-    guard scalars.count >= 2, scalars[0] == "-" else { return false }
-    let body = scalars[1] == "-" ? scalars.dropFirst(2) : scalars.dropFirst(1)
+    // Every allowed character is ASCII, so a byte of a multi-byte scalar fails.
+    let bytes = flag.utf8
+    guard bytes.count >= 2, bytes.first == UInt8(ascii: "-") else { return false }
+    let body = bytes.dropFirst(bytes.dropFirst().first == UInt8(ascii: "-") ? 2 : 1)
     guard let first = body.first, isAlphanumeric(first) else { return false }
-    return body.allSatisfy { isAlphanumeric($0) || $0 == "-" || $0 == "." }
+    return body.allSatisfy {
+      isAlphanumeric($0) || $0 == UInt8(ascii: "-") || $0 == UInt8(ascii: ".")
+    }
+  }
+
+  private static func isAlphanumeric(_ byte: UInt8) -> Bool {
+    switch byte {
+    case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"),
+      UInt8(ascii: "0")...UInt8(ascii: "9"):
+      true
+    default: false
+    }
   }
 
   private static func isAlphanumeric(_ scalar: Unicode.Scalar) -> Bool {
