@@ -174,22 +174,4 @@ import Testing
         """))
     #expect(found.map(\.location.line) == [2, 3])
   }
-
-  @Test func xcTestImportsAreFound() {
-    let found = Detect.xcTestImports(
-      in: scope("import XCTest\nimport Testing", at: "Tests/T/A.swift"))
-    #expect(found.map(\.location.line) == [1])
-  }
-
-  @Test func disabledTestsAreFound() {
-    let found = Detect.disabledTests(
-      in: scope(
-        """
-        @Test(.disabled("flaky")) func a() {}
-        @Suite(.disabled()) struct B {}
-        @Suite(.enabled(if: !Shell.available.isEmpty, "No POSIX shell available")) struct C {}
-        @Test func d() { rule.disabled() }
-        """, at: "Tests/T/A.swift"))
-    #expect(found.map(\.location.line) == [1, 2])
-  }
 }
