@@ -75,12 +75,16 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
     case .singleLine: continuation = " "
     case .multiline(let indentation): continuation = " \\\n" + indentation
     }
+    let substituter = Substituter(format.substitutions)
+    func quote(_ value: String) -> String {
+      substituter.isEmpty ? ShellEscaping.quote(value) : substituter.quote(value)
+    }
 
     var segments: [String] = []
     if let standardInput {
       switch standardInput {
       case .base64(let encoded):
-        if let pieces = Self.pieces(of: standardInput.data, substituting: format.substitutions) {
+        if let pieces = Self.pieces(of: standardInput, substituting: substituter) {
           // `{ printf … | base64 --decode; printf '%s' "$NAME"; …; }` writes the
           // same bytes, with each literal's bytes read from its variable.
           let parts = pieces.map { piece in
@@ -98,69 +102,59 @@ public struct CURLCommand: Sendable, Hashable, Codable, CustomStringConvertible 
           segments.append("| base64 --decode")
         }
       }
-      segments.append(
-        "| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
+      segments.append("| " + ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(quote))
     } else {
-      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(format))
+      segments.append(ShellEscaping.quoteIfNeeded(executable) + " " + renderedURL(quote))
     }
 
     for option in options {
       let (flag, value) = option.components(flagStyle: format.flagStyle)
       var segment = ShellEscaping.isPlainFlag(flag) ? flag : ShellEscaping.quote(flag)
       if let value {
-        segment += " " + ShellEscaping.quote(value, substituting: format.substitutions)
+        segment += " " + quote(value)
       }
       segments.append(segment)
     }
     return segments.joined(separator: continuation)
   }
 
-  private func renderedURL(_ format: CURLRenderOptions) -> String {
-    let quoted = ShellEscaping.quote(url, substituting: format.substitutions)
+  private func renderedURL(_ quote: (String) -> String) -> String {
+    let quoted = quote(url)
     return urlArguments.count == 2 ? "--url " + quoted : quoted
   }
 
   private enum Piece {
-    case bytes([UInt8])
+    case bytes(ArraySlice<UInt8>)
     /// A substitution's ``ShellSubstitution/shellWord``.
     case variable(String)
   }
 
-  /// `data` cut where a substitution's literal (as UTF-8) appears, or `nil`
-  /// when nothing matches. The longest literal wins, then the first given.
+  /// The piped bytes cut where a substitution's literal (as UTF-8) appears, or
+  /// `nil` when nothing matches. The longest literal wins, then the first given.
+  /// The payload is decoded only when there is something to substitute.
   private static func pieces(
-    of data: Data?, substituting substitutions: [ShellSubstitution]
+    of standardInput: StandardInput, substituting substituter: Substituter
   ) -> [Piece]? {
-    guard let data, !substitutions.isEmpty else { return nil }
+    guard !substituter.isEmpty, let data = standardInput.data else { return nil }
     let bytes = [UInt8](data)
-    let patterns = substitutions.map { (bytes: Array($0.literal.utf8), word: $0.shellWord) }
-    var pieces: [Piece] = []
-    var literal: [UInt8] = []
-    var index = 0
-    while index < bytes.count {
-      var match: (length: Int, word: String)?
-      for pattern in patterns
-      where pattern.bytes.count > (match?.length ?? 0)
-        && bytes.count - index >= pattern.bytes.count
-        && bytes[index..<(index + pattern.bytes.count)].elementsEqual(pattern.bytes)
-      {
-        match = (pattern.bytes.count, pattern.word)
+    return bytes.withUnsafeBufferPointer { buffer in
+      var pieces: [Piece] = []
+      var literalStart = 0
+      var index = 0
+      while index < buffer.count {
+        if let match = substituter.match(in: buffer, at: index) {
+          if literalStart < index { pieces.append(.bytes(bytes[literalStart..<index])) }
+          pieces.append(.variable(match.word))
+          index += match.length
+          literalStart = index
+        } else {
+          index += 1
+        }
       }
-      if let match {
-        if !literal.isEmpty { pieces.append(.bytes(literal)) }
-        literal = []
-        pieces.append(.variable(match.word))
-        index += match.length
-      } else {
-        literal.append(bytes[index])
-        index += 1
-      }
+      guard !pieces.isEmpty else { return nil }
+      if literalStart < buffer.count { pieces.append(.bytes(bytes[literalStart...])) }
+      return pieces
     }
-    guard pieces.contains(where: { if case .variable = $0 { true } else { false } }) else {
-      return nil
-    }
-    if !literal.isEmpty { pieces.append(.bytes(literal)) }
-    return pieces
   }
 
   /// The single-line rendering of the command.

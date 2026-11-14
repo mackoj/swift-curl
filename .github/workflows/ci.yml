@@ -45,3 +45,8 @@ jobs:
         run: swift test -Xswiftc -warnings-as-errors
       - name: Architecture rules
         run: swift test --package-path Architecture
+      - name: Build benchmarks
+        # Built, not run: timings on shared runners are noise. jemalloc is only needed to count mallocs.
+        env:
+          BENCHMARK_DISABLE_JEMALLOC: "true"
+        run: swift build --package-path Benchmarks -c release

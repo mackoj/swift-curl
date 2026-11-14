@@ -121,16 +121,6 @@ public struct CURLConversionOptions: Sendable, Hashable {
     $0.binaryBodyStrategy = .omit
     $0.bodyStreamStrategy = .omit
   }
-
-  // MARK: - Helpers
-
-  func isExcluded(_ header: String) -> Bool {
-    excludedHeaders.contains { $0.caseInsensitiveEquals(header) }
-  }
-
-  func isRedacted(_ header: String) -> Bool {
-    redactedHeaders.contains { $0.caseInsensitiveEquals(header) }
-  }
 }
 
 /// A cookie name/value pair passed through ``CURLConversionOptions/additionalCookies``.
